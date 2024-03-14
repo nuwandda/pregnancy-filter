@@ -103,7 +103,7 @@ async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
 
     # Final prompt
     prompt = """
-        photo of a nine months pregnant woman, smiling, detailed (wrinkles, blemishes, folds, moles, viens, 
+        photo of a nine months pregnant woman, detailed (wrinkles, blemishes, folds, moles, viens, 
         pores, skin imperfections:1.1), highly detailed glossy eyes, (looking at the camera), 
         specular lighting, dslr, ultra quality, sharp focus, tack sharp, dof, film grain, 
         centered, Fujifilm XT3

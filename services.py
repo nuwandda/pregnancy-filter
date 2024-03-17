@@ -33,9 +33,9 @@ def create_temp():
 
 
 def remove_temp_image(id):
-    os.remove(TEMP_PATH + '/' + id + '_input.jpg')
-    os.remove(TEMP_PATH + '/' + id + '_generated.jpg')
-    os.remove(TEMP_PATH + '/' + id + '_out.jpg')
+    os.remove(TEMP_PATH + '/' + id + '_input.png')
+    os.remove(TEMP_PATH + '/' + id + '_generated.png')
+    os.remove(TEMP_PATH + '/' + id + '_out.png')
 
 
 def replace(file_path, pattern, subst):
@@ -140,7 +140,8 @@ async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
     subprocess.call(['python', 'facefusion/run.py', '-s', '{}'.format(TEMP_PATH + '/' + temp_id + '_input.png'), 
                       '-t', '{}'.format(TEMP_PATH + '/' + temp_id + '_generated.png'),
                       '-o', '{}'.format(TEMP_PATH + '/' + temp_id + '_out.png'),
-                      '--headless', '--frame-processors', 'face_swapper', 'face_enhancer'])
+                      '--headless', '--frame-processors', 'face_swapper', 'face_enhancer', '--face-swapper-model',
+                      'simswap_512_unofficial', '--face-enhancer-model', 'codeformer'])
     final_image = Image.open(TEMP_PATH + '/' + temp_id + '_out.png')
     buffered = BytesIO()
     final_image.save(buffered, format="JPEG")

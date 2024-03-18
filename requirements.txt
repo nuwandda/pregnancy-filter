@@ -12,3 +12,4 @@ fastapi[all]
 diffusers
 transformers
 rembg
+deepface

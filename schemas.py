@@ -13,4 +13,4 @@ class _PromptBase(_pydantic.BaseModel):
 
 class PregnancyCreate(_PromptBase):
     encoded_base_img: List[str]
-    img_width: int = 512
+    img_height: int = 512

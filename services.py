@@ -10,18 +10,21 @@ from rembg import remove as remove_bg
 import base64
 import cv2
 import torch
-from diffusers import StableDiffusionImg2ImgPipeline
-# from diffusers import StableDiffusionPipeline
+# from diffusers import StableDiffusionImg2ImgPipeline
+from diffusers import StableDiffusionPipeline
 import subprocess
 from tempfile import mkstemp
 from shutil import move, copymode
 from os import fdopen, remove
+from deepface import DeepFace
 
 
 TEMP_PATH = 'temp'
 MODEL_PATH = os.getenv('MODEL_PATH')
 if MODEL_PATH is None:
     MODEL_PATH = 'weights/realisticVisionV60B1_v20Novae.safetensors'
+
+generation_seeds = [1428389871, 1400850288, 57591350, 988047182, 3374601491]
 
 # Helper functions
 def set_seed():
@@ -38,8 +41,8 @@ def remove_temp_image(id):
     os.remove(TEMP_PATH + '/' + id + '_input.png')
     os.remove(TEMP_PATH + '/' + id + '_generated.png')
     os.remove(TEMP_PATH + '/' + id + '_out.png')
-    os.remove(TEMP_PATH + '/' + id + '_out_transparent.png')
-    os.remove(TEMP_PATH + '/' + id + '_final.png')
+    # os.remove(TEMP_PATH + '/' + id + '_out_transparent.png')
+    # os.remove(TEMP_PATH + '/' + id + '_final.png')
 
 
 def replace(file_path, pattern, subst):
@@ -90,7 +93,7 @@ def add_background_to_transparent_image(transparent_image_path, background_image
 
 def create_pipeline(model_path):
     # Create the pipe 
-    pipe = StableDiffusionImg2ImgPipeline.from_single_file(
+    pipe = StableDiffusionPipeline.from_single_file(
         model_path, 
         revision="fp16", 
         torch_dtype=torch.float16
@@ -120,26 +123,27 @@ async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
     temp_id = str(uuid.uuid4())
     create_temp()
 
-    generator = torch.Generator().manual_seed(set_seed()) if float(pregnancyCreate.seed) == -1 else torch.Generator().manual_seed(int(pregnancyCreate.seed))
+    generator = torch.Generator().manual_seed(random.choice(generation_seeds))
     init_image = Image.open(BytesIO(base64.b64decode(pregnancyCreate.encoded_base_img[0])))
-    aspect_ratio = init_image.width / init_image.height
-    target_height = round(pregnancyCreate.img_width / aspect_ratio)
+    # aspect_ratio = init_image.width / init_image.height
+    # target_height = round(pregnancyCreate.img_width / aspect_ratio)
 
-    # Resize the image
-    if parse_version(Image.__version__) >= parse_version('9.5.0'):
-        resized_image = init_image.resize((pregnancyCreate.img_width, target_height), Image.LANCZOS)
-    else:
-        resized_image = init_image.resize((pregnancyCreate.img_width, target_height), Image.ANTIALIAS)
+    # # Resize the image
+    # if parse_version(Image.__version__) >= parse_version('9.5.0'):
+    #     resized_image = init_image.resize((pregnancyCreate.img_height, target_height), Image.LANCZOS)
+    # else:
+    #     resized_image = init_image.resize((pregnancyCreate.img_width, target_height), Image.ANTIALIAS)
 
-    resized_image.save(TEMP_PATH + '/' + temp_id + '_input.png')
+    init_image.save(TEMP_PATH + '/' + temp_id + '_input.png')
+    objs = DeepFace.analyze(img_path = TEMP_PATH + '/' + temp_id + '_input.png', actions = ['race'])
 
     # Final prompt
     prompt = """
-        photo of a 5 months pregnant woman, detailed (blemishes, folds, moles, viens, 
+        pregnant {} woman wearing dress outside on balcony realistic, detailed (blemishes, folds, moles, viens, 
         pores, skin imperfections:1.1), highly detailed glossy eyes, (looking at the camera), 
         specular lighting, dslr, ultra quality, sharp focus, tack sharp, dof, film grain, 
         centered, Fujifilm XT3
-    """
+    """.format(objs[0]['dominant_race'])
     negative_prompt = """
         naked, nude, out of frame, tattoo, b&w, sepia, (blurry un-sharp fuzzy un-detailed skin:1.4), 
         (twins:1.4), (geminis:1.4), (wrong eyeballs:1.1), (cloned face:1.1), (perfect skin:1.2), 
@@ -149,23 +153,25 @@ async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
 
     print('Final Prompt: ', prompt)
     image: Image = pipe(prompt,
-                                image=resized_image, strength=pregnancyCreate.strength,
-                                negative_prompt=negative_prompt, 
-                                guidance_scale=pregnancyCreate.guidance_scale, 
-                                num_inference_steps=pregnancyCreate.num_inference_steps, 
-                                generator = generator,
-                                cross_attention_kwargs={"scale": pregnancyCreate.strength}
-                                ).images[0]
+                        height=pregnancyCreate.img_height,
+                        strength=pregnancyCreate.strength,
+                        negative_prompt=negative_prompt, 
+                        guidance_scale=pregnancyCreate.guidance_scale, 
+                        num_inference_steps=pregnancyCreate.num_inference_steps, 
+                        generator = generator,
+                        cross_attention_kwargs={"scale": pregnancyCreate.strength}
+                        ).images[0]
 
     if not image.getbbox():
         image: Image = pipe(prompt,
-                                    image=resized_image, strength=pregnancyCreate.strength + 0.1,
-                                    negative_prompt=negative_prompt,
-                                    guidance_scale=pregnancyCreate.guidance_scale, 
-                                    num_inference_steps=pregnancyCreate.num_inference_steps, 
-                                    generator = generator,
-                                    cross_attention_kwargs={"scale": pregnancyCreate.strength}
-                                    ).images[0]
+                            height=pregnancyCreate.img_height,
+                            strength=pregnancyCreate.strength + 0.1,
+                            negative_prompt=negative_prompt,
+                            guidance_scale=pregnancyCreate.guidance_scale, 
+                            num_inference_steps=pregnancyCreate.num_inference_steps, 
+                            generator = generator,
+                            cross_attention_kwargs={"scale": pregnancyCreate.strength}
+                            ).images[0]
         
     image.save(TEMP_PATH + '/' + temp_id + '_generated.png')
 
@@ -177,14 +183,14 @@ async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
                       'simswap_512_unofficial'])
     
     # Remove background and add the static background
-    input_with_bg = Image.open(TEMP_PATH + '/' + temp_id + '_out.png')
-    output_transparent = remove_bg(input_with_bg)
-    output_transparent.save(TEMP_PATH + '/' + temp_id + '_out_transparent.png')
+    # input_with_bg = Image.open(TEMP_PATH + '/' + temp_id + '_out.png')
+    # output_transparent = remove_bg(input_with_bg)
+    # output_transparent.save(TEMP_PATH + '/' + temp_id + '_out_transparent.png')
 
-    add_background_to_transparent_image(TEMP_PATH + '/' + temp_id + '_out_transparent.png', 'samples/bg1.jpeg',
-                                        TEMP_PATH + '/' + temp_id + '_final.png')
+    # add_background_to_transparent_image(TEMP_PATH + '/' + temp_id + '_out_transparent.png', 'samples/bg1.jpeg',
+    #                                     TEMP_PATH + '/' + temp_id + '_final.png')
 
-    final_image = Image.open(TEMP_PATH + '/' + temp_id + '_final.png')
+    final_image = Image.open(TEMP_PATH + '/' + temp_id + '_out.png')
     buffered = BytesIO()
     final_image.save(buffered, format="JPEG")
     encoded_img = base64.b64encode(buffered.getvalue())

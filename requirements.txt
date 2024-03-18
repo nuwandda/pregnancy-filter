@@ -11,3 +11,4 @@ torch
 fastapi[all]
 diffusers
 transformers
+rembg

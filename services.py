@@ -6,10 +6,12 @@ import numpy as np
 import uuid
 import random
 from pkg_resources import parse_version
+from rembg import remove as remove_bg
 import base64
 import cv2
 import torch
 from diffusers import StableDiffusionImg2ImgPipeline
+# from diffusers import StableDiffusionPipeline
 import subprocess
 from tempfile import mkstemp
 from shutil import move, copymode
@@ -36,6 +38,8 @@ def remove_temp_image(id):
     os.remove(TEMP_PATH + '/' + id + '_input.png')
     os.remove(TEMP_PATH + '/' + id + '_generated.png')
     os.remove(TEMP_PATH + '/' + id + '_out.png')
+    os.remove(TEMP_PATH + '/' + id + '_out_transparent.png')
+    os.remove(TEMP_PATH + '/' + id + '_final.png')
 
 
 def replace(file_path, pattern, subst):
@@ -54,6 +58,34 @@ def replace(file_path, pattern, subst):
 
     #Move new file
     move(abs_path, file_path)
+
+
+def add_background_to_transparent_image(transparent_image_path, background_image_path, output_image_path):
+    # Open the transparent image
+    transparent_image = Image.open(transparent_image_path)
+
+    # Open the background image
+    background_image = Image.open(background_image_path)
+
+    # Resize background image to match transparent image dimensions
+    background_image = background_image.resize(transparent_image.size, Image.ANTIALIAS)
+
+    # Create a new image with the background color
+    new_image = Image.new("RGB", transparent_image.size, (255, 255, 255))
+
+    # Create a mask for the transparent parts of the image
+    transparency_mask = transparent_image.convert("L").point(lambda x: 255 if x < 128 else 0)
+
+    # Paste the background image onto the new image using the transparency mask
+    new_image.paste(background_image, (0, 0), mask=transparency_mask)
+
+    # Paste the original transparent image over the background image
+    new_image.paste(transparent_image, (0, 0), mask=transparent_image)
+
+    # Save the result
+    new_image.save(output_image_path)
+
+    print("Background added to the transparent parts of the image.")
     
 
 def create_pipeline(model_path):
@@ -103,7 +135,7 @@ async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
 
     # Final prompt
     prompt = """
-        photo of a nine months pregnant woman, detailed (wrinkles, blemishes, folds, moles, viens, 
+        photo of a 5 months pregnant woman, detailed (blemishes, folds, moles, viens, 
         pores, skin imperfections:1.1), highly detailed glossy eyes, (looking at the camera), 
         specular lighting, dslr, ultra quality, sharp focus, tack sharp, dof, film grain, 
         centered, Fujifilm XT3
@@ -115,6 +147,7 @@ async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
         (semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime, doll, overexposed, photoshop, oversaturated:1.4) 
     """
 
+    print('Final Prompt: ', prompt)
     image: Image = pipe(prompt,
                                 image=resized_image, strength=pregnancyCreate.strength,
                                 negative_prompt=negative_prompt, 
@@ -141,8 +174,17 @@ async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
                       '-t', '{}'.format(TEMP_PATH + '/' + temp_id + '_generated.png'),
                       '-o', '{}'.format(TEMP_PATH + '/' + temp_id + '_out.png'),
                       '--headless', '--frame-processors', 'face_swapper', 'face_enhancer', '--face-swapper-model',
-                      'simswap_512_unofficial', '--face-enhancer-model', 'codeformer'])
-    final_image = Image.open(TEMP_PATH + '/' + temp_id + '_out.png')
+                      'simswap_512_unofficial'])
+    
+    # Remove background and add the static background
+    input_with_bg = Image.open(TEMP_PATH + '/' + temp_id + '_out.png')
+    output_transparent = remove_bg(input_with_bg)
+    output_transparent.save(TEMP_PATH + '/' + temp_id + '_out_transparent.png')
+
+    add_background_to_transparent_image(TEMP_PATH + '/' + temp_id + '_out_transparent.png', 'samples/bg1.jpeg',
+                                        TEMP_PATH + '/' + temp_id + '_final.png')
+
+    final_image = Image.open(TEMP_PATH + '/' + temp_id + '_final.png')
     buffered = BytesIO()
     final_image.save(buffered, format="JPEG")
     encoded_img = base64.b64encode(buffered.getvalue())

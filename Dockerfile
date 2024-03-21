@@ -14,7 +14,6 @@ RUN apt-get install -y git
 RUN apt install python3-pip -y
 RUN apt-get install git-lfs
 RUN apt install curl
-RUN git submodule update --init --recursive
 ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib/python3.8/dist-packages/nvidia/cudnn/lib"
 RUN wget https://huggingface.co/spaces/nuwandaa/adcreative-demo-api/resolve/main/weights/realisticVisionV60B1_v20Novae.safetensors\?download\=true --directory-prefix weights --content-disposition
 

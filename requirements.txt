@@ -7,5 +7,4 @@ torch
 torchvision
 diffusers
 deepface
-tensorflow[and-cuda]
 transformers

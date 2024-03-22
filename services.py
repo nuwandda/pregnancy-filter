@@ -176,7 +176,7 @@ async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
     image.save(TEMP_PATH + '/' + temp_id + '_generated.png')
 
     # Swap the input face with the generated image
-    subprocess.call(['python', 'facefusion/run.py', '-s', '{}'.format(TEMP_PATH + '/' + temp_id + '_input.png'), 
+    subprocess.call(['python3', 'facefusion/run.py', '-s', '{}'.format(TEMP_PATH + '/' + temp_id + '_input.png'), 
                       '-t', '{}'.format(TEMP_PATH + '/' + temp_id + '_generated.png'),
                       '-o', '{}'.format(TEMP_PATH + '/' + temp_id + '_out.png'),
                       '--headless', '--frame-processors', 'face_swapper', 'face_enhancer', '--face-swapper-model',

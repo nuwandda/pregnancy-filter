@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:12.3.2-cudnn9-devel-ubuntu22.04
 
 WORKDIR /usr/app
 
@@ -14,7 +14,7 @@ RUN apt-get install -y git
 RUN apt install python3-pip -y
 RUN apt-get install git-lfs
 RUN apt install curl
-ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib/python3.8/dist-packages/nvidia/cudnn/lib"
+ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib/python3.10/dist-packages/nvidia/cudnn/lib"
 RUN wget https://huggingface.co/spaces/nuwandaa/adcreative-demo-api/resolve/main/weights/realisticVisionV60B1_v20Novae.safetensors\?download\=true --directory-prefix weights --content-disposition
 
 COPY requirements.txt /usr/app/requirements.txt

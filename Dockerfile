@@ -1,33 +1,26 @@
-FROM nvidia/cuda:12.3.2-cudnn9-devel-ubuntu22.04
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+
+ARG FACEFUSION_VERSION=2.4.1
+ARG DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /usr/app
 
-ENV PIP_DEFAULT_TIMEOUT=500
-
-USER root
-ARG DEBIAN_FRONTEND=noninteractive
-
-RUN echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | debconf-set-selections && \
-    apt-get update && \
-    apt install wget ffmpeg libsndfile1 build-essential cmake pkg-config libx11-dev libatlas-base-dev libgtk-3-dev libboost-python-dev -y
-RUN apt-get install -y git
-RUN apt install python3-pip -y
-RUN pip install --upgrade pip
+RUN apt-get update
+RUN apt-get install python3.10 -y
+RUN apt-get install python-is-python3 -y
+RUN apt-get install pip -y
+RUN apt-get install git -y
 RUN apt-get install git-lfs
-RUN apt install curl
-ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib/python3.10/dist-packages/nvidia/cudnn/lib"
+RUN apt-get install curl -y
+RUN apt-get install ffmpeg -y
+RUN apt-get install wget
 RUN wget https://huggingface.co/spaces/nuwandaa/adcreative-demo-api/resolve/main/weights/realisticVisionV60B1_v20Novae.safetensors\?download\=true --directory-prefix weights --content-disposition
-RUN wget https://huggingface.co/spaces/nuwandaa/adcreative-demo-api/resolve/main/.assets/models/2dfan4.onnx\?download\=true --directory-prefix facefusion/.assets/models --content-disposition
-RUN wget https://huggingface.co/spaces/nuwandaa/adcreative-demo-api/resolve/main/.assets/models/arcface_simswap.onnx\?download\=true --directory-prefix facefusion/.assets/models  --content-disposition
-RUN wget https://huggingface.co/spaces/nuwandaa/adcreative-demo-api/resolve/main/.assets/models/face_occluder.onnx\?download\=true --directory-prefix facefusion/.assets/models  --content-disposition
-RUN wget https://huggingface.co/spaces/nuwandaa/adcreative-demo-api/resolve/main/.assets/models/face_parser.onnx\?download\=true --directory-prefix facefusion/.assets/models  --content-disposition
-RUN wget https://huggingface.co/spaces/nuwandaa/adcreative-demo-api/resolve/main/.assets/models/gender_age.onnx\?download\=true --directory-prefix facefusion/.assets/models  --content-disposition
-RUN wget https://huggingface.co/spaces/nuwandaa/adcreative-demo-api/resolve/main/.assets/models/gfpgan_1.4.onnx\?download\=true --directory-prefix facefusion/.assets/models  --content-disposition
-RUN wget https://huggingface.co/spaces/nuwandaa/adcreative-demo-api/resolve/main/.assets/models/open_nsfw.onnx\?download\=true --directory-prefix facefusion/.assets/models  --content-disposition
-RUN wget https://huggingface.co/spaces/nuwandaa/adcreative-demo-api/resolve/main/.assets/models/simswap_512_unofficial.onnx\?download\=true --directory-prefix facefusion/.assets/models  --content-disposition
-RUN wget https://huggingface.co/spaces/nuwandaa/adcreative-demo-api/resolve/main/.assets/models/yoloface_8n.onnx\?download\=true --directory-prefix facefusion/.assets/models  --content-disposition
+
+RUN git clone https://github.com/facefusion/facefusion.git --branch ${FACEFUSION_VERSION} --single-branch
+RUN python facefusion/install.py --onnxruntime cuda-11.8 --skip-venv
 
 COPY requirements.txt /usr/app/requirements.txt
+RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 RUN pip install tensorflow[and-cuda]
 RUN pip install typing-extensions==4.9.0 --upgrade

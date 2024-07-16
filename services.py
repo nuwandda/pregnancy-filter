@@ -17,14 +17,20 @@ from tempfile import mkstemp
 from shutil import move, copymode
 from os import fdopen, remove
 from deepface import DeepFace
+from insightface.app import FaceAnalysis
+import torch
+from diffusers import DDIMScheduler, StableDiffusionXLPipeline
+from ip_adapter.ip_adapter_faceid import IPAdapterFaceID, IPAdapterFaceIDXL
 
 
 TEMP_PATH = 'temp'
-MODEL_PATH = os.getenv('MODEL_PATH')
-if MODEL_PATH is None:
-    MODEL_PATH = 'weights/realisticVisionV60B1_v20Novae.safetensors'
+base_model_path = "SG161222/RealVisXL_V4.0"
+vae_model_path = "stabilityai/sd-vae-ft-mse"
+ip_ckpt = "weights/ip-adapter-faceid_sdxl.bin"
 
-generation_seeds = [1428389871, 1400850288, 57591350, 988047182, 3374601491]
+background_prompts = ['park', 'school', 'street', 'amusement']
+app = FaceAnalysis(name="buffalo_l", providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+app.prepare(ctx_id=0, det_size=(640, 640), det_thresh=0.2)
 
 # Helper functions
 def set_seed():
@@ -39,8 +45,7 @@ def create_temp():
 
 def remove_temp_image(id):
     os.remove(TEMP_PATH + '/' + id + '_input.png')
-    os.remove(TEMP_PATH + '/' + id + '_generated.png')
-    os.remove(TEMP_PATH + '/' + id + '_out.png')
+    os.remove(TEMP_PATH + '/' + id + '_generated.jpg')
     # os.remove(TEMP_PATH + '/' + id + '_out_transparent.png')
     # os.remove(TEMP_PATH + '/' + id + '_final.png')
 
@@ -91,40 +96,37 @@ def add_background_to_transparent_image(transparent_image_path, background_image
     print("Background added to the transparent parts of the image.")
     
 
-def create_pipeline(model_path):
-    # Create the pipe 
-    pipe = StableDiffusionPipeline.from_single_file(
-        model_path, 
-        revision="fp16", 
-        torch_dtype=torch.float16
-        )
-    
-    # pipe.load_lora_weights(pretrained_model_name_or_path_or_dict="weights/lora_disney.safetensors", adapter_name="disney")
+def create_pipe(device='cuda'):
+    noise_scheduler = DDIMScheduler(
+        num_train_timesteps=1000,
+        beta_start=0.00085,
+        beta_end=0.012,
+        beta_schedule="scaled_linear",
+        clip_sample=False,
+        set_alpha_to_one=False,
+        steps_offset=1,
+    )
 
-    if torch.backends.mps.is_available():
-        device = "mps"
-    else: 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+    pipe = StableDiffusionXLPipeline.from_pretrained(
+        base_model_path,
+        torch_dtype=torch.float16,
+        scheduler=noise_scheduler,
+        add_watermarker=False
+    )
 
-    pipe.to(device)
-    
-    return pipe
+    ip_model = IPAdapterFaceIDXL(pipe, ip_ckpt, device)
 
-pipe = create_pipeline(MODEL_PATH)
-# Update the paths in submodule
-replace("facefusion/facefusion/core.py", "available_frame_processors = list_directory('facefusion/processors/frame/modules')",
-        "available_frame_processors = list_directory('facefusion/facefusion/processors/frame/modules')")
-replace("facefusion/facefusion/core.py", "available_ui_layouts = list_directory('facefusion/uis/layouts')",
-        "available_ui_layouts = list_directory('facefusion/facefusion/uis/layouts')")
-replace("facefusion/facefusion/core.py", "available_frame_processors = list_directory('facefusion/processors/frame/modules')",
-        "available_frame_processors = list_directory('facefusion/facefusion/processors/frame/modules')")
+    return ip_model
+
+ip_model = create_pipe()
 
 async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
     temp_id = str(uuid.uuid4())
     create_temp()
 
-    generator = torch.Generator().manual_seed(random.choice(generation_seeds))
     init_image = Image.open(BytesIO(base64.b64decode(pregnancyCreate.encoded_base_img[0])))
+    faces = app.get(np.asarray(init_image))
+    faceid_embeds = torch.from_numpy(faces[0].normed_embedding).unsqueeze(0)
     # aspect_ratio = init_image.width / init_image.height
     # target_height = round(pregnancyCreate.img_width / aspect_ratio)
 
@@ -136,61 +138,26 @@ async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
 
     init_image.save(TEMP_PATH + '/' + temp_id + '_input.png')
     objs = DeepFace.analyze(img_path = TEMP_PATH + '/' + temp_id + '_input.png', actions = ['race'])
+    theme = random.choice(background_prompts)
 
     # Final prompt
-    prompt = """
-        pregnant {} woman wearing dress outside on balcony realistic, detailed (blemishes, folds, moles, viens, 
-        pores, skin imperfections:1.1), highly detailed glossy eyes, (looking at the camera), 
-        specular lighting, dslr, ultra quality, sharp focus, tack sharp, dof, film grain, 
-        centered, Fujifilm XT3
-    """.format(objs[0]['dominant_race'])
+    prompt = "a full body portrait, a pregnant {} woman in a dress, natural skin, dark shot, in the {}".format(objs[0]['dominant_race'], theme)
     negative_prompt = """
-        naked, nude, out of frame, tattoo, b&w, sepia, (blurry un-sharp fuzzy un-detailed skin:1.4), 
-        (twins:1.4), (geminis:1.4), (wrong eyeballs:1.1), (cloned face:1.1), (perfect skin:1.2), 
-        (mutated hands and fingers:1.3), disconnected hands, disconnected limbs, amputation, 
-        (semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime, doll, overexposed, photoshop, oversaturated:1.4) 
+        (octane render, render, drawing, anime, bad photo, bad photography:1.3), 
+        (worst quality, low quality, blurry:1.2), (bad teeth, deformed teeth, deformed lips), 
+        (bad anatomy, bad proportions:1.1), (deformed iris, deformed pupils), (deformed eyes, bad eyes), 
+        (deformed face, ugly face, bad face), (deformed hands, bad hands, fused fingers), 
+        morbid, mutilated, mutation, disfigured
     """
 
     print('Final Prompt: ', prompt)
-    image: Image = pipe(prompt,
-                        height=pregnancyCreate.img_height,
-                        strength=pregnancyCreate.strength,
-                        negative_prompt=negative_prompt, 
-                        guidance_scale=pregnancyCreate.guidance_scale, 
-                        num_inference_steps=pregnancyCreate.num_inference_steps, 
-                        generator = generator,
-                        cross_attention_kwargs={"scale": pregnancyCreate.strength}
-                        ).images[0]
-
-    if not image.getbbox():
-        image: Image = pipe(prompt,
-                            height=pregnancyCreate.img_height,
-                            strength=pregnancyCreate.strength + 0.1,
-                            negative_prompt=negative_prompt,
-                            guidance_scale=pregnancyCreate.guidance_scale, 
-                            num_inference_steps=pregnancyCreate.num_inference_steps, 
-                            generator = generator,
-                            cross_attention_kwargs={"scale": pregnancyCreate.strength}
-                            ).images[0]
+    image = ip_model.generate(prompt=prompt, negative_prompt=negative_prompt, faceid_embeds=faceid_embeds, 
+                               guidance_scale=7.5, num_samples=1, 
+                               width=1024, height=1024, num_inference_steps=30)[0]
         
-    image.save(TEMP_PATH + '/' + temp_id + '_generated.png')
+    image.save(TEMP_PATH + '/' + temp_id + '_generated.jpg')
 
-    # Swap the input face with the generated image
-    subprocess.call(['python3', 'facefusion/run.py', '-s', '{}'.format(TEMP_PATH + '/' + temp_id + '_input.png'), 
-                      '-t', '{}'.format(TEMP_PATH + '/' + temp_id + '_generated.png'),
-                      '-o', '{}'.format(TEMP_PATH + '/' + temp_id + '_out.png'),
-                      '--headless', '--frame-processors', 'face_swapper', 'face_enhancer', '--face-swapper-model',
-                      'simswap_512_unofficial'])
-    
-    # Remove background and add the static background
-    # input_with_bg = Image.open(TEMP_PATH + '/' + temp_id + '_out.png')
-    # output_transparent = remove_bg(input_with_bg)
-    # output_transparent.save(TEMP_PATH + '/' + temp_id + '_out_transparent.png')
-
-    # add_background_to_transparent_image(TEMP_PATH + '/' + temp_id + '_out_transparent.png', 'samples/bg1.jpeg',
-    #                                     TEMP_PATH + '/' + temp_id + '_final.png')
-
-    final_image = Image.open(TEMP_PATH + '/' + temp_id + '_out.png')
+    final_image = Image.open(TEMP_PATH + '/' + temp_id + '_generated.jpg')
     buffered = BytesIO()
     final_image.save(buffered, format="JPEG")
     encoded_img = base64.b64encode(buffered.getvalue())

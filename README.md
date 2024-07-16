@@ -15,7 +15,7 @@ Beyond its aesthetic appeal, the stable diffusion pregnancy filter holds promise
 
 As research and development in stable diffusion pregnancy filter technology continue to advance, this transformative tool is poised to redefine the way pregnancy-related imagery is perceived, experienced, and shared in the digital age. By harnessing the power of image processing and artistic expression, the stable diffusion pregnancy filter celebrates the beauty and wonder of pregnancy, enriching the visual landscape of parenthood for generations to come.
 
-![sample_image](samples/sample.jpg "Sample Pregnancy Filter")
+![sample_image](samples/sample.png "Sample Pregnancy Filter")
 
 <!-- ARCHITECTURE -->
 ## Architecture

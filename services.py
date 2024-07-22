@@ -19,14 +19,15 @@ from os import fdopen, remove
 from deepface import DeepFace
 from insightface.app import FaceAnalysis
 import torch
-from diffusers import DDIMScheduler, StableDiffusionXLPipeline
-from ip_adapter.ip_adapter_faceid import IPAdapterFaceID, IPAdapterFaceIDXL
+from diffusers import StableDiffusionPipeline, DPMSolverSinglestepScheduler, AutoencoderKL
+from ip_adapter.ip_adapter_faceid import IPAdapterFaceID
 
 
 TEMP_PATH = 'temp'
-base_model_path = "SG161222/RealVisXL_V4.0"
+base_model_path = "weights/realisticVisionV60B1_v51HyperVAE.safetensors"
+# base_model_path = "/home/bugrahan/Documents/Personal/Project/stable-diffusion-webui/models/Stable-diffusion/realisticVisionV60B1_v51HyperVAE.safetensors"
 vae_model_path = "stabilityai/sd-vae-ft-mse"
-ip_ckpt = "weights/ip-adapter-faceid_sdxl.bin"
+ip_ckpt = "weights/ip-adapter-faceid_sd15.bin"
 
 background_prompts = ['park', 'school', 'street', 'amusement']
 app = FaceAnalysis(name="buffalo_l", providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
@@ -97,24 +98,30 @@ def add_background_to_transparent_image(transparent_image_path, background_image
     
 
 def create_pipe(device='cuda'):
-    noise_scheduler = DDIMScheduler(
-        num_train_timesteps=1000,
-        beta_start=0.00085,
-        beta_end=0.012,
-        beta_schedule="scaled_linear",
-        clip_sample=False,
-        set_alpha_to_one=False,
-        steps_offset=1,
+    noise_scheduler = DPMSolverSinglestepScheduler(
+        use_karras_sigmas=True
     )
+    vae = AutoencoderKL.from_pretrained(vae_model_path).to(dtype=torch.float16)
+    # pipe = StableDiffusionPipeline.from_pretrained(
+    #     base_model_path,
+    #     torch_dtype=torch.float16,
+    #     scheduler=noise_scheduler,
+    #     vae=vae,
+    #     feature_extractor=None,
+    #     safety_checker=None
+    # )
 
-    pipe = StableDiffusionXLPipeline.from_pretrained(
-        base_model_path,
+    pipe = StableDiffusionPipeline.from_single_file(
+        pretrained_model_link_or_path=base_model_path,
         torch_dtype=torch.float16,
         scheduler=noise_scheduler,
-        add_watermarker=False
+        vae=vae,
+        feature_extractor=None,
+        safety_checker=None,
+        local_files_only=True
     )
 
-    ip_model = IPAdapterFaceIDXL(pipe, ip_ckpt, device)
+    ip_model = IPAdapterFaceID(pipe, ip_ckpt, device)
 
     return ip_model
 
@@ -143,17 +150,17 @@ async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
     # Final prompt
     prompt = "a full body portrait, a pregnant {} woman in a dress, natural skin, dark shot, in the {}".format(objs[0]['dominant_race'], theme)
     negative_prompt = """
-        (octane render, render, drawing, anime, bad photo, bad photography:1.3), 
-        (worst quality, low quality, blurry:1.2), (bad teeth, deformed teeth, deformed lips), 
-        (bad anatomy, bad proportions:1.1), (deformed iris, deformed pupils), (deformed eyes, bad eyes), 
-        (deformed face, ugly face, bad face), (deformed hands, bad hands, fused fingers), 
-        morbid, mutilated, mutation, disfigured
+        (nsfw, naked, nude, deformed iris, deformed pupils, semi-realistic, cgi, 3d, 
+        render, sketch, cartoon, drawing, anime, mutated hands and fingers:1.4), 
+        (deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, 
+        extra limb, missing limb, floating limbs, disconnected limbs, mutation, mutated, 
+        ugly, disgusting, amputation
     """
 
     print('Final Prompt: ', prompt)
     image = ip_model.generate(prompt=prompt, negative_prompt=negative_prompt, faceid_embeds=faceid_embeds, 
-                               guidance_scale=7.5, num_samples=1, 
-                               width=1024, height=1024, num_inference_steps=30)[0]
+                               guidance_scale=1.5, num_samples=1, 
+                               width=512, height=768, num_inference_steps=30)[0]
         
     image.save(TEMP_PATH + '/' + temp_id + '_generated.jpg')
 

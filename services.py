@@ -24,8 +24,8 @@ from ip_adapter.ip_adapter_faceid import IPAdapterFaceID
 
 
 TEMP_PATH = 'temp'
-base_model_path = "weights/realisticVisionV60B1_v51HyperVAE.safetensors"
-# base_model_path = "/home/bugrahan/Documents/Personal/Project/stable-diffusion-webui/models/Stable-diffusion/realisticVisionV60B1_v51HyperVAE.safetensors"
+# base_model_path = "weights/realisticVisionV60B1_v51HyperVAE.safetensors"
+base_model_path = "/home/bugrahan/Documents/Personal/Project/stable-diffusion-webui/models/Stable-diffusion/realisticVisionV60B1_v51HyperVAE.safetensors"
 vae_model_path = "stabilityai/sd-vae-ft-mse"
 ip_ckpt = "weights/ip-adapter-faceid_sd15.bin"
 
@@ -172,7 +172,6 @@ def create_pipe(device='cuda'):
         vae=vae,
         feature_extractor=None,
         safety_checker=None,
-        local_files_only=True
     )
 
     ip_model = IPAdapterFaceID(pipe, ip_ckpt, device)

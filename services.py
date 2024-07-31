@@ -35,16 +35,45 @@ app.prepare(ctx_id=0, det_size=(640, 640), det_thresh=0.2)
 
 # Helper functions
 def set_seed():
+    """
+    This function generates a random seed within a specified range and returns it.
+    The seed is used for reproducibility in random number generation.
+
+    Parameters:
+    None.
+
+    Returns:
+    int: A random seed within the range [42, 4294967295].
+    """
     seed = random.randint(42,4294967295)
     return seed
 
 
 def create_temp():
+    """
+    This function creates a temporary directory if it does not already exist.
+
+    Parameters:
+    None.
+
+    Returns:
+    None. The function creates a directory at the path specified by the TEMP_PATH constant.
+    If the directory already exists, the function does nothing.
+    """
     if not os.path.exists(TEMP_PATH):
         os.makedirs(TEMP_PATH)
 
 
 def remove_temp_image(id):
+    """
+    This function removes temporary images created during the image generation process.
+
+    Parameters:
+    id (str): The unique identifier of the image. This identifier is used to construct the file paths of the temporary images.
+
+    Returns:
+    None. The function removes the temporary images from the file system.
+    """
     os.remove(TEMP_PATH + '/' + id + '_input.png')
     os.remove(TEMP_PATH + '/' + id + '_generated.jpg')
     # os.remove(TEMP_PATH + '/' + id + '_out_transparent.png')
@@ -52,24 +81,49 @@ def remove_temp_image(id):
 
 
 def replace(file_path, pattern, subst):
-    #Create temp file
+    """
+    This function replaces all occurrences of a specified pattern in a file with a new substring.
+    It creates a temporary file, writes the modified content to it, copies the file permissions from the original file,
+    removes the original file, and moves the temporary file to replace it.
+
+    Parameters:
+    file_path (str): The path of the file to be modified.
+    pattern (str): The substring to be replaced.
+    subst (str): The new substring to replace the pattern.
+
+    Returns:
+    None. The function modifies the file in place.
+    """
+    # Create temp file
     fh, abs_path = mkstemp()
     with fdopen(fh,'w') as new_file:
         with open(file_path) as old_file:
             for line in old_file:
                 new_file.write(line.replace(pattern, subst))
 
-    #Copy the file permissions from the old file to the new file
+    # Copy the file permissions from the old file to the new file
     copymode(file_path, abs_path)
 
-    #Remove original file
+    # Remove original file
     remove(file_path)
 
-    #Move new file
+    # Move new file
     move(abs_path, file_path)
 
 
 def add_background_to_transparent_image(transparent_image_path, background_image_path, output_image_path):
+    """
+    This function adds a background image to a transparent image. The background image is resized to match the dimensions
+    of the transparent image, and then pasted onto the new image using a transparency mask.
+
+    Parameters:
+    transparent_image_path (str): The file path of the transparent image.
+    background_image_path (str): The file path of the background image.
+    output_image_path (str): The file path where the resulting image will be saved.
+
+    Returns:
+    None. The function saves the resulting image to the specified output file path.
+    """
     # Open the transparent image
     transparent_image = Image.open(transparent_image_path)
 
@@ -127,7 +181,18 @@ def create_pipe(device='cuda'):
 
 ip_model = create_pipe()
 
+
 async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
+    """
+    This function generates an image of a pregnant woman based on the input image and parameters.
+
+    Parameters:
+    pregnancyCreate (_schemas.PregnancyCreate): An object containing information about the pregnant woman,
+        such as the encoded base image.
+
+    Returns:
+    Image: The generated image of the pregnant woman. The image is encoded as a base64 string.
+    """
     temp_id = str(uuid.uuid4())
     create_temp()
 
@@ -148,7 +213,7 @@ async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
     theme = random.choice(background_prompts)
 
     # Final prompt
-    prompt = "a full body portrait, a pregnant {} woman in a dress, natural skin, dark shot, in the {}".format(objs[0]['dominant_race'], theme)
+    prompt = "a full body portrait, a pregnant {} woman in a dress, natural skin, in the {}".format(objs[0]['dominant_race'], theme)
     negative_prompt = """
         (nsfw, naked, nude, deformed iris, deformed pupils, semi-realistic, cgi, 3d, 
         render, sketch, cartoon, drawing, anime, mutated hands and fingers:1.4), 

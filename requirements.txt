@@ -16,3 +16,9 @@ opencv-python==4.8.1.78
 psutil==5.9.8
 tqdm==4.66.2
 scipy==1.12.0
+colorthief
+einops
+accelerate 
+insightface 
+omegaconf 
+tomesd

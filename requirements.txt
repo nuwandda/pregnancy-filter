@@ -1,3 +1,5 @@
+cmake
+mediapipe
 fastapi[all]
 uvicorn
 numpy==1.23.0
@@ -5,9 +7,8 @@ Pillow
 rembg
 torch
 torchvision
-diffusers
-deepface
-transformers
+diffusers==0.22.1
+transformers==4.30.2
 filetype==1.2.0
 gradio==3.50.2
 onnx==1.15.0
@@ -22,3 +23,5 @@ accelerate
 insightface 
 omegaconf 
 tomesd
+deepface
+tensorflow==2.13.0

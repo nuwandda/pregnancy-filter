@@ -21,6 +21,7 @@ from insightface.app import FaceAnalysis
 import torch
 from diffusers import StableDiffusionPipeline, DPMSolverSinglestepScheduler, AutoencoderKL
 from ip_adapter.ip_adapter_faceid import IPAdapterFaceID
+import tomesd
 
 
 TEMP_PATH = 'temp'
@@ -174,6 +175,7 @@ def create_pipe(device='cuda'):
         safety_checker=None,
     )
 
+    tomesd.apply_patch(pipe, ratio=0.5)
     ip_model = IPAdapterFaceID(pipe, ip_ckpt, device)
 
     return ip_model
@@ -212,19 +214,24 @@ async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
     theme = random.choice(background_prompts)
 
     # Final prompt
-    prompt = "a full body portrait, a pregnant {} woman in a dress, natural skin, in the {}".format(objs[0]['dominant_race'], theme)
+    prompt = "a full body portrait, a pregnant {} woman, wearing casual clothes, in the {}".format(objs[0]['dominant_race'], theme)
     negative_prompt = """
         (nsfw, naked, nude, deformed iris, deformed pupils, semi-realistic, cgi, 3d, 
         render, sketch, cartoon, drawing, anime, mutated hands and fingers:1.4), 
         (deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, 
         extra limb, missing limb, floating limbs, disconnected limbs, mutation, mutated, 
-        ugly, disgusting, amputation
+        ugly, disgusting, amputation, bad dress
     """
 
     print('Final Prompt: ', prompt)
     image = ip_model.generate(prompt=prompt, negative_prompt=negative_prompt, faceid_embeds=faceid_embeds, 
                                guidance_scale=1.5, num_samples=1, 
                                width=512, height=768, num_inference_steps=30)[0]
+    # If NSFW is present
+    if not image.getbbox():
+        image = ip_model.generate(prompt=prompt, negative_prompt=negative_prompt, faceid_embeds=faceid_embeds, 
+                        guidance_scale=1.5, num_samples=1, 
+                        width=512, height=768, num_inference_steps=40)[0]
         
     image.save(TEMP_PATH + '/' + temp_id + '_generated.jpg')
 

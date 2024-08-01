@@ -22,6 +22,7 @@ import torch
 from diffusers import StableDiffusionPipeline, DPMSolverSinglestepScheduler, AutoencoderKL
 from ip_adapter.ip_adapter_faceid import IPAdapterFaceID
 import tomesd
+import time
 
 
 TEMP_PATH = 'temp'
@@ -196,6 +197,7 @@ async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
     """
     temp_id = str(uuid.uuid4())
     create_temp()
+    start = time.time()
 
     init_image = Image.open(BytesIO(base64.b64decode(pregnancyCreate.encoded_base_img[0])))
     faces = app.get(np.asarray(init_image))
@@ -214,7 +216,7 @@ async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
     theme = random.choice(background_prompts)
 
     # Final prompt
-    prompt = "a full body portrait, a pregnant {} woman, wearing casual clothes, in the {}".format(objs[0]['dominant_race'], theme)
+    prompt = "a full body portrait, a pregnant {} woman, wearing a dress, detailed face, highly detailed, ultra-realistic, in the {}".format(objs[0]['dominant_race'], theme)
     negative_prompt = """
         (nsfw, naked, nude, deformed iris, deformed pupils, semi-realistic, cgi, 3d, 
         render, sketch, cartoon, drawing, anime, mutated hands and fingers:1.4), 
@@ -234,6 +236,8 @@ async def generate_image(pregnancyCreate: _schemas.PregnancyCreate) -> Image:
                         width=512, height=768, num_inference_steps=40)[0]
         
     image.save(TEMP_PATH + '/' + temp_id + '_generated.jpg')
+
+    print('Time: ', time.time() - start)
 
     final_image = Image.open(TEMP_PATH + '/' + temp_id + '_generated.jpg')
     buffered = BytesIO()
